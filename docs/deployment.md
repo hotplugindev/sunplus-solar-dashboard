@@ -62,10 +62,10 @@ npx wrangler secret put ADMIN_API_KEY
 
 ```bash
 # Local (for development)
-pnpm --filter api wrangler d1 migrations apply DB --local
+pnpm --filter api exec wrangler d1 migrations apply DB --local
 
 # Remote (for production)
-pnpm --filter api wrangler d1 migrations apply DB --remote
+pnpm --filter api exec wrangler d1 migrations apply DB --remote
 ```
 
 ---
@@ -73,7 +73,7 @@ pnpm --filter api wrangler d1 migrations apply DB --remote
 ## 3. Deploy API Worker
 
 ```bash
-pnpm --filter api wrangler deploy
+pnpm --filter api exec wrangler deploy
 ```
 
 This deploys the Hono worker with:
@@ -92,7 +92,7 @@ The worker will be available at `https://sunplus-api.<your-subdomain>.workers.de
 
 ```bash
 pnpm --filter web build
-pnpm --filter web wrangler pages deploy dist
+npx wrangler pages deploy apps/web/dist --project-name sunplus-web
 ```
 
 Or connect the repository to Cloudflare Pages for automatic deployments:
@@ -143,7 +143,7 @@ pnpm install
 cp apps/api/.dev.vars.example apps/api/.dev.vars
 
 # 3. Run local migrations
-pnpm --filter api wrangler d1 migrations apply DB --local
+pnpm --filter api exec wrangler d1 migrations apply DB --local
 
 # 4. Start both servers (API on :8787, Web on :3000)
 pnpm dev

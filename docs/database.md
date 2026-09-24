@@ -108,8 +108,8 @@ CREATE INDEX idx_daily_summaries_device_date ON daily_telemetry_summaries(device
 Run migrations:
 ```bash
 # Local
-pnpm --filter api wrangler d1 migrations apply DB --local
+pnpm --filter api exec wrangler d1 migrations apply DB --local
 
 # Remote
-pnpm --filter api wrangler d1 migrations apply DB --remote
+pnpm --filter api exec wrangler d1 migrations apply DB --remote
 ```

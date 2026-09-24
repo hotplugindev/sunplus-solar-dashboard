@@ -1,41 +1,39 @@
-import type { DeviceStatus } from "@sunplus/shared";
+import type { ProviderId } from "@sunplus/shared";
 
 export function formatKw(value: number): string {
   return `${value.toFixed(2)} kW`;
+}
+
+export function formatKwh(value: number): string {
+  return `${value.toFixed(2)} kWh`;
 }
 
 export function formatPct(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
-export function formatTemp(value: number): string {
-  return `${value.toFixed(1)}°C`;
+export function providerLabel(provider: ProviderId): string {
+  const labels: Record<ProviderId, string> = {
+    huawei: "Huawei FusionSolar",
+    sungrow: "Sungrow iSolarCloud",
+    solaredge: "SolarEdge",
+    sma: "SMA Energy",
+    fronius: "Fronius Solar.web",
+    sigenergy: "Sigenergy",
+  };
+  return labels[provider];
 }
 
-export function statusColor(status: DeviceStatus): string {
-  switch (status) {
-    case "online":
-      return "text-emerald-400";
-    case "degraded":
-      return "text-amber-400";
-    case "offline":
-      return "text-red-400";
-    case "maintenance":
-      return "text-blue-400";
-  }
-}
-
-export function statusBg(status: DeviceStatus): string {
-  switch (status) {
-    case "online":
-      return "bg-emerald-500";
-    case "degraded":
-      return "bg-amber-500";
-    case "offline":
-      return "bg-red-500";
-    case "maintenance":
-      return "bg-blue-500";
-  }
+export function providerColor(provider: ProviderId): string {
+  const colors: Record<ProviderId, string> = {
+    huawei: "text-red-400",
+    sungrow: "text-blue-400",
+    solaredge: "text-orange-400",
+    sma: "text-purple-400",
+    fronius: "text-emerald-400",
+    sigenergy: "text-cyan-400",
+  };
+  return colors[provider];
 }
 
 export function timeAgo(iso: string | null): string {

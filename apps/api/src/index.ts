@@ -2,9 +2,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { authMiddleware, requireAdmin } from "./middleware/auth";
 import { rateLimitMiddleware } from "./middleware/rate-limit";
-import { telemetryRoutes } from "./routes/telemetry";
-import { deviceRoutes } from "./routes/devices";
-import { alertRoutes } from "./routes/alerts";
+import { sourceRoutes } from "./routes/sources";
+import { metricsRoutes } from "./routes/metrics";
 import { handleScheduledCron } from "./services/cron";
 
 const app = new Hono<{ Bindings: Env; Variables: { authRole: string } }>();
@@ -18,13 +17,10 @@ const api = app.basePath("/api/v1");
 
 api.use("*", authMiddleware);
 
-api.route("/telemetry", telemetryRoutes);
+api.route("/sources", sourceRoutes);
+api.use("/sources/*", requireAdmin);
 
-api.route("/devices", deviceRoutes);
-api.use("/devices/register", requireAdmin);
-
-api.route("/alerts", alertRoutes);
-api.use("/alerts/resolve", requireAdmin);
+api.route("/metrics", metricsRoutes);
 
 export default {
   fetch: app.fetch,

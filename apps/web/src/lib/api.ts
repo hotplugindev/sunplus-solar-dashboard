@@ -1,9 +1,4 @@
-import type { Alert, Device, IngestResult, TelemetrySample } from "@sunplus/shared";
-
-export interface DeviceWithTelemetry {
-  device: Device;
-  telemetry: TelemetrySample | null;
-}
+import type { NormalizedMetric, Source, TelemetrySample } from "@sunplus/shared";
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? "";
 
@@ -36,26 +31,21 @@ export class ApiError extends Error {
 }
 
 export const api = {
-  devices: {
-    list: () => request<{ devices: Device[] }>("/api/v1/devices"),
-    get: (id: string) => request<{ device: Device }>(`/api/v1/devices/${id}`),
-    latestTelemetry: (id: string) =>
-      request<{ telemetry: TelemetrySample }>(`/api/v1/devices/${id}/telemetry/latest`),
-    listWithLatest: () =>
-      request<{ devices: DeviceWithTelemetry[] }>("/api/v1/devices/latest"),
-    telemetryHistory: (id: string, range: string) =>
-      request<{ deviceId: string; range: string; telemetry: TelemetrySample[] }>(
-        `/api/v1/devices/${id}/telemetry/history?range=${range}`
-      ),
+  sources: {
+    list: () => request<{ sources: Source[] }>("/api/v1/sources"),
+    create: (data: { name: string; provider: string; config: Record<string, string>; pollIntervalMinutes: number }) =>
+      request<{ source: Source }>("/api/v1/sources", { method: "POST", body: JSON.stringify(data) }),
+    toggle: (id: number, isActive: boolean) =>
+      request<{ success: boolean }>(`/api/v1/sources/${id}/toggle`, { method: "POST", body: JSON.stringify({ isActive }) }),
+    remove: (id: number) =>
+      request<{ success: boolean }>(`/api/v1/sources/${id}`, { method: "DELETE" }),
   },
-  alerts: {
-    list: (opts?: { deviceId?: string; unresolved?: boolean; limit?: number }) => {
-      const params = new URLSearchParams();
-      if (opts?.deviceId) params.set("deviceId", opts.deviceId);
-      if (opts?.unresolved) params.set("unresolved", "true");
-      if (opts?.limit) params.set("limit", String(opts.limit));
-      const qs = params.toString();
-      return request<{ alerts: Alert[] }>(`/api/v1/alerts${qs ? `?${qs}` : ""}`);
-    },
+  metrics: {
+    fetch: () => request<{ metrics: NormalizedMetric[]; timestamp: string }>("/api/v1/metrics"),
+    cached: () => request<{ metrics: NormalizedMetric[]; timestamp: string | null }>("/api/v1/metrics/cached"),
+    history: (sourceId: number, range: string) =>
+      request<{ sourceId: number; range: string; telemetry: TelemetrySample[] }>(
+        `/api/v1/metrics/${sourceId}/history?range=${range}`
+      ),
   },
 };

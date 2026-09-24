@@ -87,7 +87,7 @@ ADMIN_API_KEY=your-admin-key
 ### 3. Run Database Migrations (Local)
 
 ```bash
-pnpm --filter api wrangler d1 migrations apply DB --local
+pnpm --filter api exec wrangler d1 migrations apply DB --local
 ```
 
 ### 4. Start Development Servers
@@ -164,14 +164,14 @@ npx wrangler secret put DEVICE_API_KEY
 npx wrangler secret put ADMIN_API_KEY
 
 # 4. Run remote migrations
-pnpm --filter api wrangler d1 migrations apply DB --remote
+pnpm --filter api exec wrangler d1 migrations apply DB --remote
 
 # 5. Deploy worker
-pnpm --filter api wrangler deploy
+pnpm --filter api exec wrangler deploy
 
 # 6. Build and deploy frontend
 pnpm --filter web build
-pnpm --filter web wrangler pages deploy dist
+npx wrangler pages deploy apps/web/dist --project-name sunplus-web
 ```
 
 ## Scripts

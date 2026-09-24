@@ -1,35 +1,30 @@
 import { useCallback } from "react";
-import type { DeviceWithTelemetry } from "../lib/api";
+import type { NormalizedMetric } from "@sunplus/shared";
 import { usePolling } from "../hooks/usePolling";
-import { useAlerts } from "../hooks/useAlerts";
 import { api } from "../lib/api";
-import DeviceList from "../components/DeviceList";
-import AlertFeed from "../components/AlertFeed";
-import { Activity, AlertTriangle, Sun, Zap } from "lucide-react";
+import MetricCard from "../components/MetricCard";
+import { Activity, Sun, Zap, Battery } from "lucide-react";
 
 export default function Dashboard() {
-  const fetcher = useCallback(async (): Promise<DeviceWithTelemetry[]> => {
-    const res = await api.devices.listWithLatest();
-    return res.devices;
+  const fetcher = useCallback(async (): Promise<NormalizedMetric[]> => {
+    const res = await api.metrics.cached();
+    return res.metrics;
   }, []);
 
-  const { data: devicesWithTelemetry, loading } = usePolling({ fetcher, intervalMs: 15_000 });
-  const { data: alerts } = useAlerts({ unresolved: true, limit: 10 });
+  const { data: metrics, loading } = usePolling({ fetcher, intervalMs: 15_000 });
 
-  const devices = devicesWithTelemetry?.map((d) => d.device) ?? [];
-  const onlineCount = devices.filter((d) => d.status === "online").length;
-  const totalCapacity = devices.reduce((sum, d) => sum + d.capacityKw, 0);
-  const totalOutput = devicesWithTelemetry?.reduce(
-    (sum, d) => sum + (d.telemetry?.powerOutputKw ?? 0),
-    0
-  ) ?? 0;
-  const criticalAlerts = alerts?.filter((a) => a.severity === "critical").length ?? 0;
+  const totalPower = metrics?.reduce((sum, m) => sum + m.acPowerKw, 0) ?? 0;
+  const totalYield = metrics?.reduce((sum, m) => sum + m.dailyYieldKwh, 0) ?? 0;
+  const batterySources = metrics?.filter((m) => m.batterySoc != null) ?? [];
+  const avgBattery = batterySources.length > 0
+    ? batterySources.reduce((sum, m) => sum + (m.batterySoc ?? 0), 0) / batterySources.length
+    : null;
 
   const stats = [
-    { label: "Devices Online", value: `${onlineCount}/${devices.length}`, icon: Sun, color: "text-emerald-400" },
-    { label: "Live Output", value: `${totalOutput.toFixed(1)} kW`, icon: Zap, color: "text-solar-400" },
-    { label: "Active Alerts", value: String(alerts?.length ?? 0), icon: AlertTriangle, color: "text-amber-400" },
-    { label: "Critical", value: String(criticalAlerts), icon: Activity, color: "text-red-400" },
+    { label: "Total AC Power", value: `${totalPower.toFixed(2)} kW`, icon: Zap, color: "text-solar-400" },
+    { label: "Total Daily Yield", value: `${totalYield.toFixed(2)} kWh`, icon: Sun, color: "text-emerald-400" },
+    { label: "Sources Active", value: String(metrics?.length ?? 0), icon: Activity, color: "text-blue-400" },
+    { label: "Avg Battery SOC", value: avgBattery != null ? `${avgBattery.toFixed(0)}%` : "N/A", icon: Battery, color: "text-purple-400" },
   ];
 
   return (
@@ -48,20 +43,19 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2">
-          <h2 className="text-lg font-semibold mb-4">Devices</h2>
-          {loading ? (
-            <div className="text-gray-500 text-sm">Loading devices...</div>
-          ) : (
-            <DeviceList devices={devices} />
-          )}
+      {loading ? (
+        <div className="text-gray-500 text-sm">Loading metrics...</div>
+      ) : metrics && metrics.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {metrics.map((metric) => (
+            <MetricCard key={`${metric.provider}:${metric.sourceId}`} metric={metric} />
+          ))}
         </div>
-        <div>
-          <h2 className="text-lg font-semibold mb-4">Active Alerts</h2>
-          <AlertFeed alerts={alerts ?? []} />
+      ) : (
+        <div className="text-center py-12 text-gray-500">
+          No metrics available yet. Configure sources in Settings.
         </div>
-      </div>
+      )}
     </div>
   );
 }

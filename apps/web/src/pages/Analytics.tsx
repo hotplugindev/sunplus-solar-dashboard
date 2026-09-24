@@ -1,18 +1,18 @@
 import { useState } from "react";
-import { useDevices } from "../hooks/useDevices";
-import { useTelemetryHistory } from "../hooks/useTelemetryHistory";
-import PowerChart from "../components/PowerChart";
 import type { TelemetryRange } from "@sunplus/shared";
+import { useSources } from "../hooks/useSources";
+import { useTelemetryHistory } from "../hooks/useTelemetryHistory";
+import MetricsChart from "../components/MetricsChart";
 
 const ranges: TelemetryRange[] = ["1h", "6h", "24h", "7d", "30d"];
 
 export default function Analytics() {
-  const { data: devices } = useDevices();
-  const [selectedDevice, setSelectedDevice] = useState<string>("");
+  const { data: sources } = useSources();
+  const [selectedSource, setSelectedSource] = useState<number | undefined>(undefined);
   const [range, setRange] = useState<TelemetryRange>("24h");
 
-  const deviceId = selectedDevice || devices?.[0]?.id;
-  const { data: history, loading } = useTelemetryHistory(deviceId, range);
+  const sourceId = selectedSource ?? sources?.[0]?.id;
+  const { data: history, loading } = useTelemetryHistory(sourceId, range);
 
   return (
     <div className="space-y-6">
@@ -20,13 +20,13 @@ export default function Analytics() {
         <h1 className="text-2xl font-bold">Analytics</h1>
         <div className="flex items-center gap-3">
           <select
-            value={deviceId ?? ""}
-            onChange={(e) => setSelectedDevice(e.target.value)}
+            value={sourceId ?? ""}
+            onChange={(e) => setSelectedSource(Number(e.target.value))}
             className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm"
           >
-            {devices?.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
+            {sources?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
               </option>
             ))}
           </select>
@@ -52,33 +52,19 @@ export default function Analytics() {
         <div className="text-gray-500 text-sm">Loading telemetry history...</div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <PowerChart
+          <MetricsChart
             data={history ?? []}
-            dataKey="powerOutputKw"
+            dataKey="acPowerKw"
             color="#f59e0b"
-            title="Power Output"
+            title="AC Power Output"
             unit="kW"
           />
-          <PowerChart
+          <MetricsChart
             data={history ?? []}
-            dataKey="voltage"
-            color="#3b82f6"
-            title="Voltage"
-            unit="V"
-          />
-          <PowerChart
-            data={history ?? []}
-            dataKey="temperatureC"
-            color="#ef4444"
-            title="Temperature"
-            unit="°C"
-          />
-          <PowerChart
-            data={history ?? []}
-            dataKey="efficiencyPct"
+            dataKey="dailyYieldKwh"
             color="#10b981"
-            title="Efficiency"
-            unit="%"
+            title="Daily Yield"
+            unit="kWh"
           />
         </div>
       )}

@@ -3,15 +3,12 @@ import type { TelemetryRange, TelemetrySample } from "@sunplus/shared";
 import { usePolling } from "./usePolling";
 import { api } from "../lib/api";
 
-export function useTelemetryHistory(
-  deviceId: string | undefined,
-  range: TelemetryRange
-) {
+export function useTelemetryHistory(sourceId: number | undefined, range: TelemetryRange) {
   const fetcher = useCallback(async (): Promise<TelemetrySample[]> => {
-    if (!deviceId) return [];
-    const res = await api.devices.telemetryHistory(deviceId, range);
+    if (!sourceId) return [];
+    const res = await api.metrics.history(sourceId, range);
     return res.telemetry;
-  }, [deviceId, range]);
+  }, [sourceId, range]);
 
-  return usePolling({ fetcher, intervalMs: 30_000, enabled: !!deviceId });
+  return usePolling({ fetcher, intervalMs: 60_000, enabled: !!sourceId });
 }

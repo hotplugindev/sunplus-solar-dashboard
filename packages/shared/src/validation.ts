@@ -1,26 +1,21 @@
 import { z } from "zod";
 
-export const telemetryIngestSchema = z.object({
-  deviceId: z.string().min(1).max(128),
-  voltage: z.number().positive().max(2000),
-  current: z.number().positive().max(5000),
-  temperatureC: z.number().min(-60).max(150),
-  efficiencyPct: z.number().min(0).max(100),
-});
-
 export const telemetryRangeSchema = z.enum(["1h", "6h", "24h", "7d", "30d"]);
 
-export const deviceCreateSchema = z.object({
-  id: z.string().min(1).max(128),
+export const sourceCreateSchema = z.object({
   name: z.string().min(1).max(256),
-  siteLocation: z.string().min(1).max(256),
-  capacityKw: z.number().positive(),
+  provider: z.enum(["huawei", "sungrow", "solaredge", "sma", "fronius", "sigenergy"]),
+  config: z.record(z.string()),
+  pollIntervalMinutes: z.number().int().min(5).max(1440).default(15),
 });
 
-export const alertResolveSchema = z.object({
-  alertId: z.number().int().positive(),
+export const sourceUpdateSchema = z.object({
+  name: z.string().min(1).max(256).optional(),
+  config: z.record(z.string()).optional(),
+  isActive: z.boolean().optional(),
+  pollIntervalMinutes: z.number().int().min(5).max(1440).optional(),
 });
 
-export type TelemetryIngestInput = z.infer<typeof telemetryIngestSchema>;
-export type DeviceCreateInput = z.infer<typeof deviceCreateSchema>;
 export type TelemetryRangeInput = z.infer<typeof telemetryRangeSchema>;
+export type SourceCreateInput = z.infer<typeof sourceCreateSchema>;
+export type SourceUpdateInput = z.infer<typeof sourceUpdateSchema>;
