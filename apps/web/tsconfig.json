@@ -1,0 +1,4 @@
+{
+  "extends": "@sunplus/tsconfig/react-app.json",
+  "include": ["src"]
+}

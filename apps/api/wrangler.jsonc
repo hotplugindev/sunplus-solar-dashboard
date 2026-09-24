@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sunplus-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ENVIRONMENT": "production"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sunplus-db",
+      "database_id": "<D1_DATABASE_ID>",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "TELEMETRY_KV",
+      "id": "<KV_NAMESPACE_ID>"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 0 * * *"]
+  },
+  "observability": {
+    "enabled": true
+  }
+}
