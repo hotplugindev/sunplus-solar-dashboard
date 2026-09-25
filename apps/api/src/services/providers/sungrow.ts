@@ -1,18 +1,19 @@
 import type { NormalizedMetric } from "@sunplus/shared";
-import type { ProviderAdapter } from "./types";
+import type { ProviderAdapter, ProviderAuth } from "./types";
 
 const BASE_URL = "https://isolarcloud.com/api";
 
 export const sungrowAdapter: ProviderAdapter = {
   providerId: "sungrow",
 
-  async poll(config: Record<string, string>): Promise<NormalizedMetric[]> {
-    const appId = config["appId"];
-    const apiKey = config["apiKey"];
-    const deviceSn = config["deviceSn"];
+  async poll(auth: ProviderAuth): Promise<NormalizedMetric[]> {
+    const appId = auth.oauth_client_id;
+    const apiKey = auth.api_key;
+    const extra = JSON.parse(auth.extra_config || "{}") as Record<string, string>;
+    const deviceSn = extra["deviceSn"];
 
     if (!appId || !apiKey || !deviceSn) {
-      throw new Error("Sungrow requires appId, apiKey, and deviceSn in config");
+      throw new Error("Sungrow requires oauth_client_id, api_key, and deviceSn in extra_config");
     }
 
     const tokenRes = await fetch(`${BASE_URL}/v1/user/login`, {

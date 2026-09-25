@@ -2,39 +2,39 @@
 
 ## Overview
 
-SunPlus is a real-time telemetry ingestion, processing, and visualization platform for solar array monitoring. It ingests high-frequency metrics (voltage, current, temperature, efficiency) from distributed edge devices, buffers and aggregates them at the edge, and renders real-time dashboards.
+SunPlus is a solar monitoring platform that polls metrics from third-party provider APIs, stores telemetry data, and serves it to dashboards. The API initiates outbound requests to configured providers on a schedule or on-demand, normalizes the results, and exposes them via authenticated endpoints.
 
 ## Data Flow
 
 ```
-+---------------------+      HTTPS POST (JSON)       +------------------------------+
-| Solar Edge Inverter | ---------------------------> | Cloudflare Worker (Hono API) |
-| (Telemetry Sender)  |                              +------------------------------+
-+---------------------+                                    |              |
-                                            Write Snapshot  |              | Log Events
-                                            (Low Latency)   v              v & Metrics
-                                                     +------------+  +------------+
-                                                     | Cloudflare |  | Cloudflare |
-                                                     | Workers KV |  |   D1 SQL   |
-                                                     +------------+  +------------+
-                                                            |              |
-                                            Cached Snapshot  |              | Historical
-                                            Read (<1ms)      v              v Range Queries
-                                                      +----------------------------+
-                                                      |  React / Vite Dashboard    |
-                                                      +----------------------------+
++-------------------+       Outbound HTTPS        +------------------------------+
+| Provider APIs     | <-------------------------- | Cloudflare Worker (Hono API) |
+| (SMA, Fronius...) |                             +------------------------------+
++-------------------+                                   |              |
+                                          Write Snapshot  |              | Log Events
+                                          (Low Latency)   v              v & Metrics
+                                                   +------------+  +------------+
+                                                   | Cloudflare |  | Cloudflare |
+                                                   | Workers KV |  |   D1 SQL   |
+                                                   +------------+  +------------+
+                                                          |              |
+                                          Cached Snapshot  |              | Historical
+                                          Read (<1ms)      v              v Range Queries
+                                                    +----------------------------+
+                                                    |  React / Vite Dashboard    |
+                                                    +----------------------------+
 ```
 
 ## Component Layers
 
-### 1. Ingestion Layer
+### 1. Polling Layer
 
-Solar inverter micro-controllers stream telemetry payloads every 5-60 seconds via `POST /api/v1/telemetry/ingest`. Each payload includes voltage, current, temperature, and efficiency readings.
+The API server periodically calls outbound to each configured provider's cloud monitoring API. Each provider adapter implements its own authentication and data fetching logic. Polling occurs both on-demand (when metrics endpoints are requested) and via a scheduled cron trigger.
 
 ### 2. Edge Worker Routing
 
 The Cloudflare Worker uses Hono to handle:
-- Bearer token authentication (device vs admin roles)
+- Password-based bearer token authentication (admin vs dashboard roles)
 - Payload validation via Zod schemas
 - IP-based rate limiting (token bucket algorithm)
 - Route dispatching
@@ -43,28 +43,25 @@ The Cloudflare Worker uses Hono to handle:
 
 | Storage Engine | Primary Use Case | Access Pattern |
 |---|---|---|
-| **Cloudflare KV** | Latest telemetry snapshots, pre-aggregated charts | High-frequency write / Sub-1ms global read |
-| **Cloudflare D1** | Historical metrics, device registry, alert history | Structured SQL queries, time-series aggregations |
+| **Cloudflare KV** | Latest metric snapshots, pre-aggregated charts | High-frequency write / Sub-1ms global read |
+| **Cloudflare D1** | Historical telemetry, source registry, app settings, provider auth | Structured SQL queries, time-series aggregations |
 
 ### 4. Presentation Layer
 
-The React SPA queries KV (via API endpoints) for rapid device status cards and D1 for long-term power generation trends and analytics.
-
-## KV Write Optimization
-
-To protect the 1,000 KV writes/day free-tier limit, the ingestion service implements:
-
-1. **Delta Filtering**: Skips KV update if power output change is < 15% vs cached snapshot
-2. **Fault Bypass**: Immediately writes to KV on critical anomalies (temp > 65C, voltage < 100 or > 1500, efficiency < 80%)
-3. **Heartbeat Interval**: Forces a KV write if no update has occurred for > 1 hour
+The React SPA authenticates with a dashboard password stored in localStorage, then queries the public metrics endpoint for real-time cards and historical endpoints for analytics charts.
 
 ## Scheduled Cron Tasks
 
 A daily cron trigger (`0 0 * * *` UTC midnight) executes:
 
-1. **Rollup**: Aggregates telemetry_logs older than 90 days into `daily_telemetry_summaries`
-2. **Prune**: Deletes raw telemetry_logs older than 90 days
-3. **Chart Pre-aggregation**: Stores 90-day daily summaries as JSON in KV (`chart:{device_id}:90d`)
+1. **Poll Providers**: Fetches metrics from all active sources respecting per-source poll intervals
+2. **Rollup**: Aggregates telemetry_logs older than 90 days into `daily_telemetry_summaries`
+3. **Prune**: Deletes raw telemetry_logs older than 90 days
+4. **Chart Pre-aggregation**: Stores 90-day daily summaries as JSON in KV (`chart:{source_id}:90d`)
+
+## Authentication Model
+
+On first access, the system requires initialization with an admin password and a dashboard password. Both are hashed using PBKDF2-SHA256 and stored in the `app_settings` table. All subsequent API requests require a Bearer token matching one of these passwords. Admin tokens grant access to source management; dashboard tokens grant read-only access to metrics.
 
 ## Monorepo Structure
 
@@ -74,15 +71,16 @@ A daily cron trigger (`0 0 * * *` UTC midnight) executes:
 │   ├── api/                   # Cloudflare Worker (Hono API)
 │   │   ├── src/
 │   │   │   ├── index.ts       # Fetch handler + scheduled handler
-│   │   │   ├── routes/        # Telemetry, Devices, Alerts
-│   │   │   ├── services/      # Ingestion, D1 queries, KV, Cron
-│   │   │   └── middleware/    # Auth, Rate limiting
+│   │   │   ├── routes/        # Setup, sources, metrics, public
+│   │   │   ├── services/      # Sources, crypto, cron, providers
+│   │   │   └── middleware/    # Auth, rate limiting
 │   │   ├── migrations/        # D1 SQL migrations
 │   │   └── wrangler.jsonc     # Cloudflare bindings
 │   └── web/                   # Vite + React Dashboard
 │       └── src/
-│           ├── components/    # Telemetry visualizers, alert feeds
-│           ├── pages/         # Dashboard, Analytics, Device Detail, Settings
+│           ├── components/    # Layout, MetricCard, Charts, LoginModal
+│           ├── contexts/      # Auth context
+│           ├── pages/         # Dashboard, Analytics, Settings
 │           ├── hooks/         # Polling, data fetching hooks
 │           └── lib/           # API client, utilities
 └── packages/

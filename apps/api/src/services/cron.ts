@@ -1,6 +1,6 @@
 import type { NormalizedMetric } from "@sunplus/shared";
 import { getAdapter } from "./providers";
-import { getActiveSources, markSourcePolled } from "./sources";
+import { getActiveSourcesWithAuth, markSourcePolled } from "./sources";
 
 const METRICS_KV_TTL = 3600;
 const CHART_KV_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -12,23 +12,22 @@ export async function handleScheduledCron(env: Env): Promise<void> {
 }
 
 async function pollProviders(env: Env): Promise<void> {
-  const sources = await getActiveSources(env.DB);
+  const sources = await getActiveSourcesWithAuth(env.DB);
   const allMetrics: NormalizedMetric[] = [];
   const now = Date.now();
 
-  for (const source of sources) {
-    if (source.last_polled_at) {
-      const lastMs = new Date(source.last_polled_at).getTime();
-      const intervalMs = source.poll_interval_minutes * 60 * 1000;
+  for (const { source, auth } of sources) {
+    if (source.lastPolledAt) {
+      const lastMs = new Date(source.lastPolledAt).getTime();
+      const intervalMs = source.pollIntervalMinutes * 60 * 1000;
       if (now - lastMs < intervalMs) continue;
     }
 
-    const adapter = getAdapter(source.provider as NormalizedMetric["provider"]);
-    if (!adapter) continue;
+    const adapter = getAdapter(source.provider as NormalizedMetric["provider"], env.DB);
+    if (!adapter || !auth) continue;
 
     try {
-      const config = JSON.parse(source.config) as Record<string, string>;
-      const metrics = await adapter.poll(config);
+      const metrics = await adapter.poll(auth);
 
       for (const m of metrics) {
         m.sourceId = source.id;
@@ -74,7 +73,7 @@ async function pollProviders(env: Env): Promise<void> {
 
 async function rollupAndPrune(env: Env): Promise<void> {
   await env.DB.prepare(
-    `INSERT OR REPLACE INTO daily_summaries (source_id, log_date, total_kwh, peak_kw, sample_count)
+    `INSERT OR REPLACE INTO daily_telemetry_summaries (source_id, log_date, total_kwh, peak_kw, sample_count)
      SELECT
        source_id,
        date(timestamp) as log_date,
@@ -100,7 +99,7 @@ async function preAggregateCharts(env: Env): Promise<void> {
     const { results: summaries } = await env.DB
       .prepare(
         `SELECT log_date, total_kwh, peak_kw, sample_count
-         FROM daily_summaries
+         FROM daily_telemetry_summaries
          WHERE source_id = ?
          ORDER BY log_date DESC
          LIMIT 90`

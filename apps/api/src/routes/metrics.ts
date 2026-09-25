@@ -2,23 +2,22 @@ import { Hono } from "hono";
 import { telemetryRangeSchema } from "@sunplus/shared";
 import type { NormalizedMetric, TelemetrySample } from "@sunplus/shared";
 import { getAdapter } from "../services/providers";
-import { getActiveSources, markSourcePolled } from "../services/sources";
+import { getActiveSourcesWithAuth, markSourcePolled } from "../services/sources";
 
 const METRICS_KV_TTL = 3600;
 
 export const metricsRoutes = new Hono<{ Bindings: Env; Variables: { authRole: string } }>();
 
 metricsRoutes.get("/", async (c) => {
-  const sources = await getActiveSources(c.env.DB);
+  const sources = await getActiveSourcesWithAuth(c.env.DB);
   const allMetrics: NormalizedMetric[] = [];
 
-  for (const source of sources) {
-    const adapter = getAdapter(source.provider as NormalizedMetric["provider"]);
-    if (!adapter) continue;
+  for (const { source, auth } of sources) {
+    const adapter = getAdapter(source.provider as NormalizedMetric["provider"], c.env.DB);
+    if (!adapter || !auth) continue;
 
     try {
-      const config = JSON.parse(source.config) as Record<string, string>;
-      const metrics = await adapter.poll(config);
+      const metrics = await adapter.poll(auth);
 
       for (const m of metrics) {
         m.sourceId = source.id;

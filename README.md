@@ -1,194 +1,122 @@
 # SunPlus Solar Dashboard
 
-An end-to-end telemetry ingestion, processing, and visualization platform for solar array monitoring. Ingests high-frequency metrics (voltage, current, temperature, efficiency) from distributed edge devices, aggregates them at the edge, and renders real-time dashboards for monitoring power output, system health, and fault alerts.
+Solar monitoring platform built on Cloudflare's edge network. Polls metrics from third-party provider APIs, aggregates telemetry data, and renders interactive dashboards.
 
-## Architecture
+## Features
 
-```
-Solar Inverters ──HTTPS POST──> Cloudflare Worker (Hono)
-                                     │           │
-                              KV Write│           │D1 Write
-                                     ▼           ▼
-                              ┌──────────┐  ┌──────────┐
-                              │ Workers  │  │  D1 SQL  │
-                              │   KV     │  │ Database │
-                              └──────────┘  └──────────┘
-                                     │           │
-                              KV Read│           │SQL Query
-                                     ▼           ▼
-                              ┌─────────────────────────┐
-                              │   React/Vite Dashboard  │
-                              └─────────────────────────┘
-```
+- **Edge-Native Architecture**: Cloudflare Workers + D1 + KV for sub-millisecond global reads
+- **Provider Polling**: API initiates outbound requests to configured solar providers on schedule
+- **Password Authentication**: Separate admin and dashboard passwords, hashed with PBKDF2-SHA256
+- **First-Run Setup**: Guided initialization flow for password creation
+- **Historical Analytics**: Time-series charts with 1h/6h/24h/7d/30d ranges
+- **Source Management**: Add, configure, and manage multiple solar sources with per-provider auth
+- **Public Metrics API**: Authenticated endpoint for external dashboards like Grafana
+- **Dark Mode UI**: Tailwind CSS dashboard with responsive layout
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
 | Monorepo | pnpm workspaces + Turborepo |
-| Language | TypeScript (strict) |
+| Language | TypeScript (strict mode) |
 | API | Cloudflare Workers + Hono |
-| Database | Cloudflare D1 |
+| Database | Cloudflare D1 (SQLite) |
 | Cache | Cloudflare KV |
 | Frontend | React 18 + Vite + Tailwind CSS |
 | Charts | Recharts |
 | Validation | Zod |
 
-## Project Structure
-
-```
-├── apps/
-│   ├── api/          # Cloudflare Worker (Hono)
-│   │   ├── src/
-│   │   │   ├── index.ts          # Fetch + scheduled handlers
-│   │   │   ├── routes/           # telemetry, devices, alerts
-│   │   │   ├── services/         # ingestion, devices, alerts, cron
-│   │   │   └── middleware/       # auth, rate-limit
-│   │   ├── migrations/           # D1 SQL migrations
-│   │   └── wrangler.jsonc        # Cloudflare bindings config
-│   └── web/          # React dashboard
-│       └── src/
-│           ├── components/       # DeviceList, TelemetryCard, PowerChart, AlertFeed
-│           ├── pages/            # Dashboard, Analytics, DeviceDetail, Settings
-│           ├── hooks/            # usePolling, useDevices, useAlerts, etc.
-│           └── lib/              # API client, utilities
-├── packages/
-│   ├── shared/       # Zod schemas + TypeScript types
-│   └── tsconfig/     # Shared TS config bases
-└── docs/             # Architecture, API, DB, deployment docs
-```
-
 ## Quick Start
 
-### Prerequisites
-
-- Node.js >= 20
-- pnpm >= 11
-- Cloudflare account (for D1/KV)
-
-### 1. Install Dependencies
-
 ```bash
+# Clone and install
+git clone <repo-url>
+cd sunplus-solar-dashboard
 pnpm install
-```
 
-### 2. Configure Environment
+# Run migrations (local D1)
+pnpm db:migrate
 
-```bash
-cp apps/api/.dev.vars.example apps/api/.dev.vars
-```
-
-Edit `.dev.vars` with your local API keys:
-```
-DEVICE_API_KEY=your-device-key
-ADMIN_API_KEY=your-admin-key
-```
-
-### 3. Run Database Migrations (Local)
-
-```bash
-pnpm --filter api exec wrangler d1 migrations apply DB --local
-```
-
-### 4. Start Development Servers
-
-```bash
+# Start dev servers (API :8787 + Web :3000)
 pnpm dev
 ```
 
-This starts:
-- API worker at `http://localhost:8787`
-- Web dashboard at `http://localhost:3000` (proxies `/api` to :8787)
+On first load, the UI will prompt you to create an admin password and a dashboard password.
 
-### 5. Register a Device
+## Project Structure
 
-```bash
-curl -X POST http://localhost:8787/api/v1/devices/register \
-  -H "Authorization: Bearer dev-admin-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"id": "solar-inv-001", "name": "Inverter A", "siteLocation": "Rooftop East", "capacityKw": 50}'
+```
+/
+├── apps/
+│   ├── api/              # Cloudflare Worker (Hono REST API)
+│   │   ├── src/
+│   │   │   ├── index.ts          # Fetch + scheduled handlers
+│   │   │   ├── routes/           # Setup, sources, metrics, public
+│   │   │   ├── services/         # Sources, crypto, cron, providers
+│   │   │   └── middleware/       # Auth, rate limiting
+│   │   ├── migrations/           # D1 SQL schema
+│   │   └── wrangler.jsonc        # CF resource bindings
+│   └── web/              # Vite + React SPA
+│       └── src/
+│           ├── components/       # Layout, MetricCard, Charts, LoginModal
+│           ├── contexts/         # Auth context
+│           ├── pages/            # Dashboard, Analytics, Settings
+│           ├── hooks/            # Polling, data fetching
+│           └── lib/              # API client, utilities
+└── packages/
+    ├── shared/           # Types, Zod schemas (used by api + web)
+    └── tsconfig/         # Shared TS config bases
 ```
 
-### 6. Ingest Telemetry
+## API Endpoints
 
-```bash
-curl -X POST http://localhost:8787/api/v1/telemetry/ingest \
-  -H "Authorization: Bearer dev-device-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"deviceId": "solar-inv-001", "voltage": 380.5, "current": 12.4, "temperatureC": 42.1, "efficiencyPct": 96.8}'
-```
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/setup/status` | None | Check initialization state |
+| `POST` | `/api/v1/setup/initialize` | None | Create admin and dashboard passwords |
+| `POST` | `/api/v1/setup/login` | None | Authenticate with password |
+| `GET` | `/api/v1/sources` | Any | List all sources |
+| `POST` | `/api/v1/sources` | Admin | Create source with provider auth |
+| `PATCH` | `/api/v1/sources/:id` | Admin | Update source |
+| `DELETE` | `/api/v1/sources/:id` | Admin | Delete source |
+| `PUT` | `/api/v1/sources/:id/auth` | Admin | Update provider auth |
+| `GET` | `/api/v1/metrics` | Any | Poll providers and return fresh metrics |
+| `GET` | `/api/v1/metrics/cached` | Any | Return cached metrics from KV |
+| `GET` | `/api/v1/metrics/:id/history` | Any | Historical telemetry |
+| `GET` | `/api/v1/public/metrics` | Dashboard | Public metrics for external dashboards |
+| `GET` | `/health` | None | Health check |
 
-### 7. Open the Dashboard
+See [docs/api-reference.md](./docs/api-reference.md) for full details.
 
-Visit `http://localhost:3000` to see live device status, telemetry charts, and alerts.
+## Configuration
 
-## Key Features
+### Cloudflare Bindings
 
-### Telemetry Ingestion with Smart KV Writes
+Configure in `apps/api/wrangler.jsonc`:
+- `DB`: D1 database binding
+- `TELEMETRY_KV`: KV namespace binding
 
-- Delta filtering: skips KV update if power change < 15%
-- Fault bypass: immediate KV write on critical anomalies
-- Heartbeat: forces KV write if stale for > 1 hour
+Passwords are set through the UI during first-run setup and stored as hashes in the database. No environment variables are needed for authentication.
 
-### Automated Data Lifecycle (Cron)
+## Documentation
 
-- Daily rollup of telemetry older than 90 days into daily summaries
-- Automatic pruning of raw telemetry beyond 90 days
-- Pre-aggregation of 90-day charts into KV for instant dashboard loads
-
-### Real-Time Dashboard
-
-- Coalesced API endpoint (`/devices/latest`) for single-request dashboard loads
-- Page visibility throttling (pauses polling when tab is hidden)
-- CDN cache headers on all read endpoints
-
-### Alert System
-
-- Automatic alert creation on threshold violations (temp > 65C, efficiency < 80%)
-- Severity levels: info, warning, critical
-- Device status auto-degradation on critical alerts
-
-## Production Deployment
-
-See [docs/deployment.md](docs/deployment.md) for the full guide. Summary:
-
-```bash
-# 1. Create Cloudflare resources
-npx wrangler d1 create sunplus-db
-npx wrangler kv namespace create TELEMETRY_KV
-
-# 2. Update wrangler.jsonc with real IDs
-
-# 3. Set secrets
-npx wrangler secret put DEVICE_API_KEY
-npx wrangler secret put ADMIN_API_KEY
-
-# 4. Run remote migrations
-pnpm --filter api exec wrangler d1 migrations apply DB --remote
-
-# 5. Deploy worker
-pnpm --filter api exec wrangler deploy
-
-# 6. Build and deploy frontend
-pnpm --filter web build
-npx wrangler pages deploy apps/web/dist --project-name sunplus-web
-```
+- [Architecture](./docs/architecture.md) - System design and data flow
+- [API Reference](./docs/api-reference.md) - Endpoint documentation
+- [Database Schema](./docs/database.md) - D1 tables and lifecycle
+- [Deployment](./docs/deployment.md) - Production deployment guide
+- [Frontend](./docs/frontend.md) - React app structure
 
 ## Scripts
 
 | Command | Description |
 |---|---|
-| `pnpm dev` | Start all dev servers (API + Web) |
+| `pnpm dev` | Start all dev servers |
 | `pnpm build` | Build all packages |
-| `pnpm typecheck` | TypeScript check across all packages |
-| `pnpm lint` | Lint (typecheck) all packages |
-| `pnpm db:migrate` | Run D1 migrations locally |
-| `pnpm db:migrate:remote` | Run D1 migrations on remote |
+| `pnpm typecheck` | TypeScript type checking |
+| `pnpm lint` | Lint all packages |
+| `pnpm db:migrate` | Apply D1 migrations locally |
+| `pnpm db:migrate:remote` | Apply D1 migrations to production |
 
-## Documentation
+## License
 
-- [Architecture](docs/architecture.md) - System design and data flow
-- [API Reference](docs/api-reference.md) - All endpoints with examples
-- [Database Schema](docs/database.md) - Tables, indexes, data lifecycle
-- [Frontend](docs/frontend.md) - Pages, components, hooks
-- [Deployment](docs/deployment.md) - Step-by-step production setup
+MIT

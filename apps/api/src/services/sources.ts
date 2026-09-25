@@ -1,4 +1,5 @@
 import type { ProviderId, Source } from "@sunplus/shared";
+import type { ProviderAuth } from "./providers/types";
 
 interface SourceRow {
   id: number;
@@ -92,11 +93,23 @@ export async function deleteSource(db: D1Database, id: number): Promise<boolean>
   return (result.meta.changes ?? 0) > 0;
 }
 
-export async function getActiveSources(db: D1Database): Promise<SourceRow[]> {
+export async function getActiveSourcesWithAuth(db: D1Database): Promise<Array<{ source: Source; auth: ProviderAuth | null }>> {
   const { results } = await db
     .prepare(`SELECT * FROM sources WHERE is_active = 1`)
     .all<SourceRow>();
-  return results;
+
+  const out: Array<{ source: Source; auth: ProviderAuth | null }> = [];
+
+  for (const row of results) {
+    const source = rowToSource(row);
+    const authRow = await db
+      .prepare(`SELECT * FROM provider_auth WHERE source_id = ? LIMIT 1`)
+      .bind(row.id)
+      .first<ProviderAuth>();
+    out.push({ source, auth: authRow || null });
+  }
+
+  return out;
 }
 
 export async function markSourcePolled(
@@ -108,4 +121,61 @@ export async function markSourcePolled(
     .prepare(`UPDATE sources SET last_polled_at = ?, last_error = ? WHERE id = ?`)
     .bind(new Date().toISOString(), error, id)
     .run();
+}
+
+export async function upsertProviderAuth(
+  db: D1Database,
+  sourceId: number,
+  input: Partial<ProviderAuth>
+): Promise<void> {
+  const existing = await db.prepare(`SELECT id FROM provider_auth WHERE source_id = ?`).bind(sourceId).first();
+
+  if (existing) {
+    const sets: string[] = [];
+    const params: Array<string | number | null> = [];
+
+    const fields: Array<keyof ProviderAuth> = [
+      "username", "password_hash", "api_key", "oauth_client_id",
+      "oauth_client_secret", "oauth_access_token", "oauth_refresh_token",
+      "oauth_token_expiry", "extra_config",
+    ];
+
+    for (const f of fields) {
+      if (input[f] !== undefined) {
+        const col = f.replace(/([A-Z])/g, "_$1").toLowerCase();
+        sets.push(`${col} = ?`);
+        params.push(input[f] as string | number | null);
+      }
+    }
+
+    if (sets.length > 0) {
+      sets.push("updated_at = CURRENT_TIMESTAMP");
+      params.push(sourceId);
+      await db.prepare(`UPDATE provider_auth SET ${sets.join(", ")} WHERE source_id = ?`).bind(...params).run();
+    }
+  } else {
+    await db.prepare(
+      `INSERT INTO provider_auth (source_id, username, password_hash, api_key, oauth_client_id, oauth_client_secret, oauth_access_token, oauth_refresh_token, oauth_token_expiry, extra_config)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      sourceId,
+      input.username || null,
+      input.password_hash || null,
+      input.api_key || null,
+      input.oauth_client_id || null,
+      input.oauth_client_secret || null,
+      input.oauth_access_token || null,
+      input.oauth_refresh_token || null,
+      input.oauth_token_expiry || null,
+      input.extra_config || "{}"
+    ).run();
+  }
+}
+
+export async function getProviderAuth(db: D1Database, sourceId: number): Promise<ProviderAuth | null> {
+  return await db.prepare(`SELECT * FROM provider_auth WHERE source_id = ?`).bind(sourceId).first<ProviderAuth>();
+}
+
+export async function deleteProviderAuth(db: D1Database, sourceId: number): Promise<void> {
+  await db.prepare(`DELETE FROM provider_auth WHERE source_id = ?`).bind(sourceId).run();
 }

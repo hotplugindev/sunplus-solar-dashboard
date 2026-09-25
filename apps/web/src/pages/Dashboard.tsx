@@ -7,7 +7,7 @@ import { Activity, Sun, Zap, Battery } from "lucide-react";
 
 export default function Dashboard() {
   const fetcher = useCallback(async (): Promise<NormalizedMetric[]> => {
-    const res = await api.metrics.cached();
+    const res = await api.public.metrics();
     return res.metrics;
   }, []);
 

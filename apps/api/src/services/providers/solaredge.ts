@@ -1,17 +1,18 @@
 import type { NormalizedMetric } from "@sunplus/shared";
-import type { ProviderAdapter } from "./types";
+import type { ProviderAdapter, ProviderAuth } from "./types";
 
 const BASE_URL = "https://monitoringapi.solaredge.com";
 
 export const solaredgeAdapter: ProviderAdapter = {
   providerId: "solaredge",
 
-  async poll(config: Record<string, string>): Promise<NormalizedMetric[]> {
-    const apiKey = config["apiKey"];
-    const siteIds = (config["siteIds"] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  async poll(auth: ProviderAuth): Promise<NormalizedMetric[]> {
+    const apiKey = auth.api_key;
+    const extra = JSON.parse(auth.extra_config || "{}") as Record<string, string>;
+    const siteIds = (extra["siteIds"] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
     if (!apiKey || siteIds.length === 0) {
-      throw new Error("SolarEdge requires apiKey and siteIds in config");
+      throw new Error("SolarEdge requires api_key and siteIds in extra_config");
     }
 
     const metrics: NormalizedMetric[] = [];

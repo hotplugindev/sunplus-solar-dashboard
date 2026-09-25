@@ -1,18 +1,19 @@
 import type { NormalizedMetric } from "@sunplus/shared";
-import type { ProviderAdapter } from "./types";
+import type { ProviderAdapter, ProviderAuth } from "./types";
 
 const BASE_URL = "https://api.solarweb.com";
 
 export const froniusAdapter: ProviderAdapter = {
   providerId: "fronius",
 
-  async poll(config: Record<string, string>): Promise<NormalizedMetric[]> {
-    const accessKeyId = config["accessKeyId"];
-    const accessKeyValue = config["accessKeyValue"];
-    const pvSystemIds = (config["pvSystemIds"] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  async poll(auth: ProviderAuth): Promise<NormalizedMetric[]> {
+    const accessKeyId = auth.oauth_client_id;
+    const accessKeyValue = auth.oauth_client_secret;
+    const extra = JSON.parse(auth.extra_config || "{}") as Record<string, string>;
+    const pvSystemIds = (extra["pvSystemIds"] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
     if (!accessKeyId || !accessKeyValue || pvSystemIds.length === 0) {
-      throw new Error("Fronius requires accessKeyId, accessKeyValue, and pvSystemIds in config");
+      throw new Error("Fronius requires oauth_client_id, oauth_client_secret, and pvSystemIds in extra_config");
     }
 
     const metrics: NormalizedMetric[] = [];

@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Activity, BarChart3, Settings, Sun } from "lucide-react";
+import { Activity, BarChart3, Settings, Sun, LogOut } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: Activity },
@@ -8,6 +9,8 @@ const navItems = [
 ];
 
 export default function Layout() {
+  const { logout } = useAuth();
+
   return (
     <div className="flex h-screen">
       <aside className="w-64 border-r border-gray-800 bg-gray-900 flex flex-col">
@@ -33,6 +36,13 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+        <button
+          onClick={logout}
+          className="flex items-center gap-3 px-6 py-4 text-sm text-gray-400 hover:text-red-400 border-t border-gray-800"
+        >
+          <LogOut className="h-4 w-4" />
+          Logout
+        </button>
       </aside>
       <main className="flex-1 overflow-y-auto p-6">
         <Outlet />

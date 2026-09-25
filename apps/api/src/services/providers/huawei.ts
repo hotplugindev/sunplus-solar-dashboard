@@ -1,5 +1,5 @@
 import type { NormalizedMetric } from "@sunplus/shared";
-import type { ProviderAdapter } from "./types";
+import type { ProviderAdapter, ProviderAuth } from "./types";
 
 const BASE_URL = "https://eu5.fusionsolar.huawei.com";
 
@@ -27,12 +27,12 @@ function bytesToHex(bytes: Uint8Array): string {
 export const huaweiAdapter: ProviderAdapter = {
   providerId: "huawei",
 
-  async poll(config: Record<string, string>): Promise<NormalizedMetric[]> {
-    const username = config["username"];
-    const password = config["password"];
+  async poll(auth: ProviderAuth): Promise<NormalizedMetric[]> {
+    const username = auth.username;
+    const password = auth.password_hash;
 
     if (!username || !password) {
-      throw new Error("Huawei requires username and password in config");
+      throw new Error("Huawei requires username and password_hash");
     }
 
     const now = new Date();

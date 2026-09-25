@@ -2,244 +2,215 @@
 
 Base URL: `/api/v1`
 
-All endpoints require authentication via `Authorization: Bearer <API_KEY>` header.
-
 ## Authentication
 
-Two API key roles exist:
+All endpoints except `/setup/*` require a Bearer token in the `Authorization` header. The token is the plaintext password (admin or dashboard) that was set during initialization. The server verifies it against the stored PBKDF2-SHA256 hash.
 
-| Role | Key | Access |
-|---|---|---|
-| `device` | `DEVICE_API_KEY` | Telemetry ingestion, read endpoints |
-| `admin` | `ADMIN_API_KEY` | All device-role endpoints + device registration + alert resolution |
-
----
-
-## Telemetry
-
-### POST /api/v1/telemetry/ingest
-
-Ingest a telemetry reading from a solar device.
-
-**Auth**: `device` or `admin`
-
-**Request Body**:
-```json
-{
-  "deviceId": "solar-inv-0842",
-  "voltage": 380.5,
-  "current": 12.4,
-  "temperatureC": 42.1,
-  "efficiencyPct": 96.8
-}
-```
-
-**Validation** (Zod):
-- `deviceId`: string, 1-128 chars
-- `voltage`: number, > 0, max 2000
-- `current`: number, > 0, max 5000
-- `temperatureC`: number, -60 to 150
-- `efficiencyPct`: number, 0 to 100
-
-**Behavior**:
-1. Validates payload via Zod
-2. Computes `powerOutputKw = (voltage * current) / 1000`
-3. Inserts into `telemetry_logs` and updates `devices.last_seen_at`
-4. Creates alerts if thresholds exceeded (temp > 65C, efficiency < 80%)
-5. Conditionally updates KV snapshot (delta filtering / fault bypass / heartbeat)
-
-**Response** `201`:
-```json
-{
-  "accepted": true,
-  "deviceId": "solar-inv-0842",
-  "powerOutputKw": 4.718,
-  "alertsCreated": 0
-}
-```
-
-**Errors**: `400` (validation), `404` (device not found)
+| Role | Access |
+|---|---|
+| `admin` | All endpoints including source management |
+| `dashboard` | Metrics and public endpoints only |
 
 ---
 
-## Devices
+## Setup
 
-### GET /api/v1/devices
+### GET /api/v1/setup/status
 
-List all registered devices.
+Check if the system has been initialized.
+
+**Auth**: None
 
 **Response** `200`:
 ```json
 {
-  "devices": [
+  "setupComplete": true
+}
+```
+
+### POST /api/v1/setup/initialize
+
+Initialize the system with admin and dashboard passwords. Can only be called once.
+
+**Auth**: None
+
+**Request Body**:
+```json
+{
+  "admin_password": "strong-admin-password",
+  "dashboard_password": "dashboard-viewing-password"
+}
+```
+
+**Response** `201`: `{ "status": "initialized" }`
+**Errors**: `409` (already initialized)
+
+### POST /api/v1/setup/login
+
+Authenticate with a password to verify credentials.
+
+**Auth**: None
+
+**Request Body**:
+```json
+{
+  "password": "dashboard-viewing-password",
+  "role": "dashboard"
+}
+```
+
+**Response** `200`:
+```json
+{
+  "token": "dashboard-viewing-password",
+  "role": "dashboard"
+}
+```
+
+**Errors**: `401` (invalid password or not initialized)
+
+---
+
+## Sources
+
+### GET /api/v1/sources
+
+List all configured sources.
+
+**Auth**: Any
+
+**Response** `200`:
+```json
+{
+  "sources": [
     {
-      "id": "solar-inv-001",
-      "name": "Inverter A",
-      "siteLocation": "Rooftop East",
-      "capacityKw": 50.0,
-      "status": "online",
-      "installedAt": "2024-01-15T00:00:00Z",
-      "lastSeenAt": "2024-12-30T14:30:00Z"
+      "id": 1,
+      "name": "Home Array",
+      "provider": "sma",
+      "isActive": true,
+      "pollIntervalMinutes": 15,
+      "lastPolledAt": "2024-12-30T14:30:00Z",
+      "lastError": null,
+      "createdAt": "2024-12-30T10:00:00Z"
     }
   ]
 }
 ```
 
-### GET /api/v1/devices/latest
+### POST /api/v1/sources
 
-Coalesced endpoint returning all devices with their latest KV telemetry snapshot. Serves the dashboard in a single request.
+Create a new source with provider authentication.
 
-**Cache**: `Cache-Control: public, max-age=3600, s-maxage=3600`
-
-**Response** `200`:
-```json
-{
-  "devices": [
-    {
-      "device": { "id": "solar-inv-001", "name": "...", "..." : "..." },
-      "telemetry": {
-        "deviceId": "solar-inv-001",
-        "voltage": 380.5,
-        "current": 12.4,
-        "powerOutputKw": 4.718,
-        "temperatureC": 42.1,
-        "efficiencyPct": 96.8,
-        "timestamp": "2024-12-30T14:30:00Z"
-      }
-    }
-  ]
-}
-```
-
-### POST /api/v1/devices/register
-
-Register a new device. **Requires admin role.**
+**Auth**: Admin required
 
 **Request Body**:
 ```json
 {
-  "id": "solar-inv-002",
-  "name": "Inverter B",
-  "siteLocation": "Rooftop West",
-  "capacityKw": 75.0
+  "name": "Home Array",
+  "provider": "sma",
+  "config": {},
+  "pollIntervalMinutes": 15,
+  "auth": {
+    "oauth_client_id": "client-id",
+    "oauth_client_secret": "client-secret",
+    "extra_config": {
+      "baseUrl": "https://api.smaapis.de",
+      "authUrl": "https://auth.smaapis.de",
+      "loginHint": "user@example.com"
+    }
+  }
 }
 ```
 
-**Response** `201`: `{ "device": { ... } }`
-**Errors**: `400` (validation), `403` (not admin), `409` (already exists)
+**Response** `201`: `{ "source": { ... } }`
 
-### GET /api/v1/devices/:id
+### GET /api/v1/sources/:id
 
-Get a single device by ID.
+Get a single source and its auth configuration.
 
-**Response** `200`: `{ "device": { ... } }`
-**Errors**: `404`
+**Auth**: Any
 
-### GET /api/v1/devices/:id/telemetry/latest
+**Response** `200`: `{ "source": { ... }, "auth": { ... } }`
 
-Get latest telemetry snapshot from KV.
+### PATCH /api/v1/sources/:id
 
-**Cache**: `Cache-Control: public, max-age=3600, s-maxage=3600`
+Update a source and optionally its auth.
 
-**Response** `200`: `{ "telemetry": { ... } }`
-**Errors**: `404` (device not found or no telemetry yet)
+**Auth**: Admin required
 
-### GET /api/v1/devices/:id/telemetry/history?range=24h
+### DELETE /api/v1/sources/:id
 
-Get historical telemetry from D1.
+Delete a source and its associated auth.
+
+**Auth**: Admin required
+
+### PUT /api/v1/sources/:id/auth
+
+Update only the authentication credentials for a source.
+
+**Auth**: Admin required
+
+---
+
+## Metrics
+
+### GET /api/v1/metrics
+
+Poll all active providers on-demand and return fresh metrics.
+
+**Auth**: Any
+
+**Cache**: `Cache-Control: public, max-age=60, s-maxage=60`
+
+**Response** `200`:
+```json
+{
+  "metrics": [
+    {
+      "sourceId": 1,
+      "sourceName": "Home Array",
+      "provider": "sma",
+      "acPowerKw": 4.72,
+      "dailyYieldKwh": 32.1,
+      "batterySoc": null,
+      "gridPowerKw": null,
+      "timestamp": "2024-12-30T14:30:00Z"
+    }
+  ],
+  "timestamp": "2024-12-30T14:30:00Z"
+}
+```
+
+### GET /api/v1/metrics/cached
+
+Return the latest cached metrics from KV without polling providers.
+
+**Auth**: Any
+
+**Cache**: `Cache-Control: public, max-age=300, s-maxage=300`
+
+### GET /api/v1/metrics/:sourceId/history?range=24h
+
+Get historical telemetry for a source from D1.
+
+**Auth**: Any
 
 **Query Params**:
 - `range`: `1h` | `6h` | `24h` | `7d` | `30d` (default: `24h`)
 
-**Cache**: `Cache-Control: public, max-age=3600, s-maxage=3600`
-
-**Behavior**: For `30d` range, serves pre-aggregated data from KV (`chart:{id}:90d`) if available; otherwise queries D1.
-
-**Response** `200`:
-```json
-{
-  "deviceId": "solar-inv-001",
-  "range": "24h",
-  "telemetry": [
-    {
-      "deviceId": "solar-inv-001",
-      "voltage": 380.5,
-      "current": 12.4,
-      "powerOutputKw": 4.718,
-      "temperatureC": 42.1,
-      "efficiencyPct": 96.8,
-      "timestamp": "2024-12-30T14:30:00Z"
-    }
-  ]
-}
-```
-
-### GET /api/v1/devices/:id/chart/90d
-
-Get pre-aggregated 90-day daily chart data from KV.
-
-**Cache**: `Cache-Control: public, max-age=3600, s-maxage=3600`
-
-**Response** `200`:
-```json
-{
-  "deviceId": "solar-inv-001",
-  "data": [
-    {
-      "log_date": "2024-12-01",
-      "total_kwh": 42.5,
-      "peak_kw": 48.2,
-      "avg_voltage": 378.1,
-      "avg_temperature_c": 38.4,
-      "sample_count": 2880
-    }
-  ]
-}
-```
+For `30d` range, serves pre-aggregated data from KV if available.
 
 ---
 
-## Alerts
+## Public
 
-### GET /api/v1/alerts
+### GET /api/v1/public/metrics
 
-List alerts with optional filters.
+Public-facing metrics endpoint for external dashboards (e.g., Grafana). Returns cached metrics or polls providers if cache is empty.
 
-**Query Params**:
-- `deviceId` (optional): filter by device
-- `unresolved` (optional): `true` to show only unresolved alerts
-- `limit` (optional): max results (default 100, max 500)
+**Auth**: Dashboard or Admin
 
-**Response** `200`:
-```json
-{
-  "alerts": [
-    {
-      "id": 1,
-      "deviceId": "solar-inv-001",
-      "severity": "critical",
-      "message": "High temperature detected: 72.3C (threshold 65C)",
-      "isResolved": false,
-      "createdAt": "2024-12-30T14:30:00Z",
-      "resolvedAt": null
-    }
-  ]
-}
-```
-
-### POST /api/v1/alerts/resolve
-
-Resolve an alert. **Requires admin role.**
-
-**Request Body**:
-```json
-{
-  "alertId": 1
-}
-```
-
-**Response** `200`: `{ "success": true }`
-**Errors**: `400` (validation), `403` (not admin), `404` (not found or already resolved)
+**Cache**: `Cache-Control: public, max-age=60, s-maxage=60`
 
 ---
 

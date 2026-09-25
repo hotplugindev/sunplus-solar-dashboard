@@ -11,10 +11,19 @@ export const PROVIDERS: ProviderInfo[] = [
   { id: "huawei", name: "Huawei", app: "FusionSolar", implemented: true },
   { id: "sungrow", name: "Sungrow", app: "iSolarCloud", implemented: true },
   { id: "solaredge", name: "SolarEdge", app: "mySolarEdge", implemented: true },
-  { id: "sma", name: "SMA", app: "SMA Energy", implemented: false },
+  { id: "sma", name: "SMA", app: "SMA Energy", implemented: true },
   { id: "fronius", name: "Fronius", app: "Solar.web", implemented: true },
   { id: "sigenergy", name: "Sigenergy", app: "mySigenergy", implemented: false },
 ];
+
+export interface ProviderAuthData {
+  username?: string;
+  password_hash?: string;
+  api_key?: string;
+  oauth_client_id?: string;
+  oauth_client_secret?: string;
+  extra_config?: Record<string, string>;
+}
 
 export interface Source {
   id: number;

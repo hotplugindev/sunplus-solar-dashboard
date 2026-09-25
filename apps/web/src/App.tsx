@@ -3,8 +3,16 @@ import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
+import { useAuth } from "./contexts/AuthContext";
+import LoginModal from "./components/LoginModal";
 
 export default function App() {
+  const { isAuthenticated, isSetupComplete } = useAuth();
+
+  if (!isSetupComplete || !isAuthenticated) {
+    return <LoginModal />;
+  }
+
   return (
     <Routes>
       <Route element={<Layout />}>

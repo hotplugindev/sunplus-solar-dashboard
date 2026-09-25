@@ -49,13 +49,6 @@ Replace the placeholder IDs in `apps/api/wrangler.jsonc`:
 }
 ```
 
-### Set Secrets
-
-```bash
-npx wrangler secret put DEVICE_API_KEY
-npx wrangler secret put ADMIN_API_KEY
-```
-
 ---
 
 ## 2. Run Migrations
@@ -80,7 +73,6 @@ This deploys the Hono worker with:
 - D1 database binding
 - KV namespace binding
 - Cron trigger (`0 0 * * *` - daily at midnight UTC)
-- Environment variables
 
 The worker will be available at `https://sunplus-api.<your-subdomain>.workers.dev`.
 
@@ -112,24 +104,9 @@ Deploy the `apps/web/dist/` folder to any static hosting provider. Set `VITE_API
 
 ---
 
-## 5. Configure Edge Devices
+## 5. Initial Setup
 
-Each solar inverter must be configured with:
-- **API endpoint**: `https://<worker-url>/api/v1/telemetry/ingest`
-- **API key**: The `DEVICE_API_KEY` value
-- **Payload format**:
-
-```json
-{
-  "deviceId": "<registered-device-id>",
-  "voltage": 380.5,
-  "current": 12.4,
-  "temperatureC": 42.1,
-  "efficiencyPct": 96.8
-}
-```
-
-Devices must be registered first via the Settings page or API before they can ingest telemetry.
+On first access, the dashboard UI will prompt you to create an admin password and a dashboard password. These are stored as PBKDF2-SHA256 hashes in the database. After initialization, use the dashboard password to log in and configure sources via the Settings page.
 
 ---
 
@@ -139,34 +116,14 @@ Devices must be registered first via the Settings page or API before they can in
 # 1. Install dependencies
 pnpm install
 
-# 2. Create local env file
-cp apps/api/.dev.vars.example apps/api/.dev.vars
-
-# 3. Run local migrations
+# 2. Run local migrations
 pnpm --filter api exec wrangler d1 migrations apply DB --local
 
-# 4. Start both servers (API on :8787, Web on :3000)
+# 3. Start both servers (API on :8787, Web on :3000)
 pnpm dev
 ```
 
-The Vite dev server proxies `/api` to `localhost:8787` automatically.
-
----
-
-## Testing Telemetry Ingestion
-
-```bash
-curl -X POST http://localhost:8787/api/v1/telemetry/ingest \
-  -H "Authorization: Bearer dev-device-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "deviceId": "solar-inv-001",
-    "voltage": 380.5,
-    "current": 12.4,
-    "temperatureC": 42.1,
-    "efficiencyPct": 96.8
-  }'
-```
+The Vite dev server proxies `/api` to `localhost:8787` automatically. On first load, the UI will show the setup form.
 
 ---
 
