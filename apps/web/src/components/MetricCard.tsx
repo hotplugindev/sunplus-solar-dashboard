@@ -1,6 +1,7 @@
 import type { NormalizedMetric } from "@sunplus/shared";
 import { PROVIDERS } from "@sunplus/shared";
 import { Zap, Sun, Battery, ArrowLeftRight } from "lucide-react";
+import { timeAgo } from "../lib/utils";
 
 export default function MetricCard({ metric }: { metric: NormalizedMetric }) {
   const providerInfo = PROVIDERS.find((p) => p.id === metric.provider);
@@ -41,13 +42,16 @@ export default function MetricCard({ metric }: { metric: NormalizedMetric }) {
             <ArrowLeftRight className="h-4 w-4 text-blue-400" />
             <div>
               <p className="text-xs text-gray-500">Grid</p>
-              <p className="text-sm font-bold">{metric.gridPowerKw.toFixed(2)} kW</p>
+              <p className={`text-sm font-bold ${metric.gridPowerKw > 0 ? "text-emerald-400" : metric.gridPowerKw < 0 ? "text-red-400" : "text-gray-400"}`}>
+                {metric.gridPowerKw > 0 ? "+" : ""}{metric.gridPowerKw.toFixed(2)} kW
+              </p>
+              <p className="text-[10px] text-gray-600">{metric.gridPowerKw > 0 ? "exporting" : "importing"}</p>
             </div>
           </div>
         )}
       </div>
 
-      <p className="text-xs text-gray-600">{new Date(metric.timestamp).toLocaleString()}</p>
+      <p className="text-xs text-gray-600">{timeAgo(metric.timestamp)}</p>
     </div>
   );
 }

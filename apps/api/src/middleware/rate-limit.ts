@@ -1,43 +1,40 @@
 import { createMiddleware } from "hono/factory";
 
-interface Bucket {
-  tokens: number;
-  lastRefill: number;
-}
-
-const buckets = new Map<string, Bucket>();
-
 const MAX_TOKENS = 60;
 const REFILL_PER_SEC = 10;
-const SWEEP_INTERVAL_MS = 60_000;
-let lastSweep = Date.now();
+const KV_PREFIX = "rl:";
+const KV_TTL = 120;
 
-export const rateLimitMiddleware = createMiddleware(async (c, next) => {
+export const rateLimitMiddleware = createMiddleware<{ Bindings: Env }>(async (c, next) => {
+  const key = c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for") ?? "unknown";
+  const kvKey = `${KV_PREFIX}${key}`;
   const now = Date.now();
-  const key =
-    c.req.header("cf-connecting-ip") ??
-    c.req.header("x-forwarded-for") ??
-    "unknown";
 
-  if (now - lastSweep > SWEEP_INTERVAL_MS) {
-    buckets.clear();
-    lastSweep = now;
-  }
+  let tokens = MAX_TOKENS;
+  let lastRefill = now;
 
-  let bucket = buckets.get(key);
-  if (!bucket) {
-    bucket = { tokens: MAX_TOKENS, lastRefill: now };
-    buckets.set(key, bucket);
-  }
+  try {
+    const stored = await c.env.TELEMETRY_KV.get(kvKey);
+    if (stored) {
+      const parsed = JSON.parse(stored) as { tokens: number; lastRefill: number };
+      tokens = parsed.tokens;
+      lastRefill = parsed.lastRefill;
+    }
+  } catch {}
 
-  const elapsedSec = (now - bucket.lastRefill) / 1000;
-  bucket.tokens = Math.min(MAX_TOKENS, bucket.tokens + elapsedSec * REFILL_PER_SEC);
-  bucket.lastRefill = now;
+  const elapsedSec = (now - lastRefill) / 1000;
+  tokens = Math.min(MAX_TOKENS, tokens + elapsedSec * REFILL_PER_SEC);
+  lastRefill = now;
 
-  if (bucket.tokens < 1) {
+  if (tokens < 1) {
     return c.json({ error: "Rate limit exceeded" }, 429);
   }
 
-  bucket.tokens -= 1;
+  tokens -= 1;
+
+  c.executionCtx.waitUntil(
+    c.env.TELEMETRY_KV.put(kvKey, JSON.stringify({ tokens, lastRefill }), { expirationTtl: KV_TTL })
+  );
+
   await next();
 });

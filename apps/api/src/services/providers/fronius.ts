@@ -1,5 +1,6 @@
 import type { NormalizedMetric } from "@sunplus/shared";
 import type { ProviderAdapter, ProviderAuth } from "./types";
+import { froniusTokenSchema, froniusFlowSchema } from "../validation";
 
 const BASE_URL = "https://api.solarweb.com";
 
@@ -30,42 +31,43 @@ export const froniusAdapter: ProviderAdapter = {
     });
 
     if (!tokenRes.ok) {
-      throw new Error(`Fronius auth failed: ${tokenRes.status}`);
+      throw new Error(`Fronius auth failed: ${tokenRes.status} ${tokenRes.statusText}`);
     }
 
-    const tokenData = await tokenRes.json() as { accessToken: string; accessTokenType: string };
-    headers["Authorization"] = `${tokenData.accessTokenType} ${tokenData.accessToken}`;
+    const tokenRaw = await tokenRes.json();
+    const tokenParsed = froniusTokenSchema.safeParse(tokenRaw);
+    if (!tokenParsed.success) {
+      throw new Error("Fronius returned invalid token response");
+    }
+
+    headers["Authorization"] = `${tokenParsed.data.accessTokenType} ${tokenParsed.data.accessToken}`;
 
     for (const pvSystemId of pvSystemIds) {
+      const now = new Date().toISOString();
       const flowRes = await fetch(
-        `${BASE_URL}/PvSystems/${pvSystemId}/FlowData?fromDateTime=${new Date().toISOString()}&toDateTime=${new Date().toISOString()}`,
+        `${BASE_URL}/PvSystems/${pvSystemId}/FlowData?fromDateTime=${now}&toDateTime=${now}`,
         { headers }
       );
 
       if (!flowRes.ok) {
-        throw new Error(`Fronius flow data error for ${pvSystemId}: ${flowRes.status}`);
+        throw new Error(`Fronius flow data error for ${pvSystemId}: ${flowRes.status} ${flowRes.statusText}`);
       }
 
-      const flowData = await flowRes.json() as {
-        aggregatedData?: {
-          produced?: number;
-        };
-        currentData?: Array<{
-          channelTypeId: number;
-          value: number;
-        }>;
-      };
+      const flowRaw = await flowRes.json();
+      const flowParsed = froniusFlowSchema.safeParse(flowRaw);
+      if (!flowParsed.success) {
+        throw new Error(`Fronius returned invalid flow data for ${pvSystemId}`);
+      }
 
+      const flowData = flowParsed.data;
       let acPowerKw = 0;
       let batterySoc: number | null = null;
       let gridPowerKw: number | null = null;
 
-      if (flowData.currentData) {
-        for (const ch of flowData.currentData) {
-          if (ch.channelTypeId === 0) acPowerKw = ch.value / 1000;
-          if (ch.channelTypeId === 4) batterySoc = ch.value;
-          if (ch.channelTypeId === 1) gridPowerKw = ch.value / 1000;
-        }
+      for (const ch of flowData.currentData ?? []) {
+        if (ch.channelTypeId === 0) acPowerKw = ch.value / 1000;
+        if (ch.channelTypeId === 4) batterySoc = ch.value;
+        if (ch.channelTypeId === 1) gridPowerKw = -ch.value / 1000;
       }
 
       const dailyYieldKwh = (flowData.aggregatedData?.produced ?? 0) / 1000;

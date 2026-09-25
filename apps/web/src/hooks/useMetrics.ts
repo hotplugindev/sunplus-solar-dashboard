@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import type { NormalizedMetric } from "@sunplus/shared";
-import { usePolling } from "./usePolling";
+import { usePolling } from "../hooks/usePolling";
 import { api } from "../lib/api";
 
 export function useMetrics() {
@@ -9,5 +9,5 @@ export function useMetrics() {
     return res.metrics;
   }, []);
 
-  return usePolling({ fetcher, intervalMs: 15_000 });
+  return usePolling({ fetcher, intervalMs: 60_000 });
 }

@@ -11,6 +11,9 @@ interface SourceRow {
   last_polled_at: string | null;
   last_error: string | null;
   created_at: string;
+  consecutive_failures: number;
+  circuit_state: string;
+  last_viewed_at: string | null;
 }
 
 function rowToSource(row: SourceRow): Source {
@@ -18,12 +21,15 @@ function rowToSource(row: SourceRow): Source {
     id: row.id,
     name: row.name,
     provider: row.provider as ProviderId,
-    config: JSON.parse(row.config) as Record<string, string>,
+    config: JSON.parse(row.config || "{}") as Record<string, string>,
     isActive: row.is_active === 1,
     pollIntervalMinutes: row.poll_interval_minutes,
     lastPolledAt: row.last_polled_at,
     lastError: row.last_error,
     createdAt: row.created_at,
+    consecutiveFailures: row.consecutive_failures ?? 0,
+    circuitState: (row.circuit_state as Source["circuitState"]) ?? "closed",
+    lastViewedAt: row.last_viewed_at,
   };
 }
 

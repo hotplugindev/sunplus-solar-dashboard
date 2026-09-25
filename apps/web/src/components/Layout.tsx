@@ -1,15 +1,34 @@
-import { NavLink, Outlet } from "react-router-dom";
-import { Activity, BarChart3, Settings, Sun, LogOut } from "lucide-react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { Activity, BarChart3, Settings, Sun, LogOut, HeartPulse } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: Activity },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/status", label: "Status", icon: HeartPulse },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export default function Layout() {
   const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      switch (e.key) {
+        case "1": navigate("/dashboard"); break;
+        case "2": navigate("/analytics"); break;
+        case "3": navigate("/status"); break;
+        case "4": navigate("/settings"); break;
+        case "r": window.dispatchEvent(new Event("manual:refresh")); break;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [navigate]);
 
   return (
     <div className="flex h-screen">

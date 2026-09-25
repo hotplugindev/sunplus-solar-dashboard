@@ -1,5 +1,6 @@
 import type { NormalizedMetric } from "@sunplus/shared";
 import type { ProviderAdapter, ProviderAuth } from "./types";
+import { solaredgeOverviewSchema, solaredgeFlowSchema } from "../validation";
 
 const BASE_URL = "https://monitoringapi.solaredge.com";
 
@@ -23,35 +24,36 @@ export const solaredgeAdapter: ProviderAdapter = {
         fetch(`${BASE_URL}/site/${siteId}/currentPowerFlow?api_key=${apiKey}`),
       ]);
 
-      if (!overviewRes.ok || !currentRes.ok) {
-        throw new Error(`SolarEdge API error for site ${siteId}: ${overviewRes.status}`);
+      if (!overviewRes.ok) {
+        throw new Error(`SolarEdge overview error for site ${siteId}: ${overviewRes.status} ${overviewRes.statusText}`);
+      }
+      if (!currentRes.ok) {
+        throw new Error(`SolarEdge flow error for site ${siteId}: ${currentRes.status} ${currentRes.statusText}`);
       }
 
-      const overview = await overviewRes.json() as {
-        overview?: {
-          currentPower?: { power: number };
-          energyToday?: { energy: number };
-          lastUpdateTime?: string;
-        };
-      };
+      const overviewRaw = await overviewRes.json();
+      const currentRaw = await currentRes.json();
 
-      const current = await currentRes.json() as {
-        siteCurrentPowerFlow?: {
-          unit?: string;
-          connections?: Array<{ from: string; to: string; value: number }>;
-        };
-      };
+      const overviewParsed = solaredgeOverviewSchema.safeParse(overviewRaw);
+      const flowParsed = solaredgeFlowSchema.safeParse(currentRaw);
 
-      const acPowerKw = (overview.overview?.currentPower?.power ?? 0) / 1000;
-      const dailyYieldKwh = (overview.overview?.energyToday?.energy ?? 0) / 1000;
-      const timestamp = overview.overview?.lastUpdateTime ?? new Date().toISOString();
+      if (!overviewParsed.success || !flowParsed.success) {
+        throw new Error(`SolarEdge returned invalid data for site ${siteId}`);
+      }
+
+      const overview = overviewParsed.data.overview;
+      const acPowerKw = (overview?.currentPower?.power ?? 0) / 1000;
+      const dailyYieldKwh = (overview?.energyToday?.energy ?? 0) / 1000;
+      const timestamp = new Date(overview?.lastUpdateTime ?? Date.now()).toISOString();
 
       let gridPowerKw: number | null = null;
-      if (current.siteCurrentPowerFlow?.connections) {
-        for (const conn of current.siteCurrentPowerFlow.connections) {
-          if (conn.from === "LOAD" && conn.to === "GRID") {
-            gridPowerKw = conn.value / 1000;
-          }
+      const connections = flowParsed.data.siteCurrentPowerFlow?.connections ?? [];
+      for (const conn of connections) {
+        if (conn.from === "LOAD" && conn.to === "GRID") {
+          gridPowerKw = conn.value / 1000;
+        }
+        if (conn.from === "GRID" && conn.to === "LOAD") {
+          gridPowerKw = -(conn.value / 1000);
         }
       }
 

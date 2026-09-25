@@ -11,6 +11,7 @@ export interface UsePollingResult<T> {
   loading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
+  isStale: boolean;
 }
 
 export function usePolling<T>({
@@ -21,6 +22,7 @@ export function usePolling<T>({
   const [data, setData] = useState<T | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [isStale, setIsStale] = useState(false);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
@@ -29,8 +31,10 @@ export function usePolling<T>({
       const result = await fetcherRef.current();
       setData(result);
       setError(null);
+      setIsStale(false);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
+      setIsStale(true);
     } finally {
       setLoading(false);
     }
@@ -52,15 +56,15 @@ export function usePolling<T>({
         if (!cancelled) {
           setData(result);
           setError(null);
+          setIsStale(false);
         }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err : new Error(String(err)));
+          setIsStale(true);
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     };
 
@@ -70,10 +74,7 @@ export function usePolling<T>({
     };
 
     const stopPolling = () => {
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
-      }
+      if (timer) { clearInterval(timer); timer = null; }
     };
 
     const handleVisibilityChange = () => {
@@ -96,5 +97,5 @@ export function usePolling<T>({
     };
   }, [enabled, intervalMs]);
 
-  return { data, loading, error, refetch };
+  return { data, loading, error, refetch, isStale };
 }

@@ -1,5 +1,6 @@
 import type { NormalizedMetric } from "@sunplus/shared";
 import type { ProviderAdapter, ProviderAuth } from "./types";
+import { huaweiResponseSchema } from "../validation";
 
 const BASE_URL = "https://eu5.fusionsolar.huawei.com";
 
@@ -61,19 +62,16 @@ export const huaweiAdapter: ProviderAdapter = {
     });
 
     if (!stationsRes.ok) {
-      throw new Error(`Huawei station list error: ${stationsRes.status}`);
+      throw new Error(`Huawei station list error: ${stationsRes.status} ${stationsRes.statusText}`);
     }
 
-    const stationsData = await stationsRes.json() as {
-      success?: boolean;
-      data?: Array<{ code: string; name: string }>;
-    };
-
-    if (!stationsData.success || !stationsData.data) {
-      throw new Error("Huawei returned no stations");
+    const stationsRaw = await stationsRes.json();
+    const stationsParsed = huaweiResponseSchema.safeParse(stationsRaw);
+    if (!stationsParsed.success || !stationsParsed.data.success || !stationsParsed.data.data) {
+      throw new Error("Huawei returned invalid station data");
     }
 
-    const stationCodes = stationsData.data.map((s) => s.code);
+    const stationCodes = stationsParsed.data.data.map((s: { code?: string; stationCode?: string }) => s.code ?? s.stationCode ?? "").filter(Boolean);
     if (stationCodes.length === 0) {
       return [];
     }
@@ -85,32 +83,28 @@ export const huaweiAdapter: ProviderAdapter = {
     });
 
     if (!realtimeRes.ok) {
-      throw new Error(`Huawei realtime data error: ${realtimeRes.status}`);
+      throw new Error(`Huawei realtime data error: ${realtimeRes.status} ${realtimeRes.statusText}`);
     }
 
-    const realtimeData = await realtimeRes.json() as {
-      success?: boolean;
-      data?: Array<{
-        stationCode: string;
-        power?: number;
-        dayEnergy?: number;
-        collectTime?: string;
-      }>;
-    };
-
-    if (!realtimeData.success || !realtimeData.data) {
+    const realtimeRaw = await realtimeRes.json();
+    const realtimeParsed = huaweiResponseSchema.safeParse(realtimeRaw);
+    if (!realtimeParsed.success || !realtimeParsed.data.success || !realtimeParsed.data.data) {
       return [];
     }
 
-    return realtimeData.data.map((station) => ({
-      sourceId: 0,
-      sourceName: "",
-      provider: "huawei" as const,
-      acPowerKw: (station.power ?? 0) / 1000,
-      dailyYieldKwh: (station.dayEnergy ?? 0) / 1000,
-      batterySoc: null,
-      gridPowerKw: null,
-      timestamp: station.collectTime ?? new Date().toISOString(),
-    }));
+    return realtimeParsed.data.data.map((station: { power?: number; dayEnergy?: number; collectTime?: string }) => {
+      const rawTs = station.collectTime;
+      const ts = rawTs && !rawTs.includes("T") ? new Date(Number(rawTs)).toISOString() : new Date(rawTs ?? Date.now()).toISOString();
+      return {
+        sourceId: 0,
+        sourceName: "",
+        provider: "huawei" as const,
+        acPowerKw: (station.power ?? 0) / 1000,
+        dailyYieldKwh: (station.dayEnergy ?? 0) / 1000,
+        batterySoc: null,
+        gridPowerKw: null,
+        timestamp: ts,
+      };
+    });
   },
 };

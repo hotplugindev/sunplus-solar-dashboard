@@ -5,15 +5,16 @@ export interface ProviderInfo {
   name: string;
   app: string;
   implemented: boolean;
+  requiredFields: string[];
 }
 
 export const PROVIDERS: ProviderInfo[] = [
-  { id: "huawei", name: "Huawei", app: "FusionSolar", implemented: true },
-  { id: "sungrow", name: "Sungrow", app: "iSolarCloud", implemented: true },
-  { id: "solaredge", name: "SolarEdge", app: "mySolarEdge", implemented: true },
-  { id: "sma", name: "SMA", app: "SMA Energy", implemented: true },
-  { id: "fronius", name: "Fronius", app: "Solar.web", implemented: true },
-  { id: "sigenergy", name: "Sigenergy", app: "mySigenergy", implemented: false },
+  { id: "huawei", name: "Huawei", app: "FusionSolar", implemented: true, requiredFields: ["Username", "Password"] },
+  { id: "sungrow", name: "Sungrow", app: "iSolarCloud", implemented: true, requiredFields: ["App ID", "API Key", "Device Serial Number"] },
+  { id: "solaredge", name: "SolarEdge", app: "mySolarEdge", implemented: true, requiredFields: ["API Key", "Site IDs"] },
+  { id: "sma", name: "SMA", app: "SMA Energy", implemented: true, requiredFields: ["Client ID", "Client Secret", "Login Hint Email"] },
+  { id: "fronius", name: "Fronius", app: "Solar.web", implemented: true, requiredFields: ["Access Key ID", "Access Key Value", "PV System IDs"] },
+  { id: "sigenergy", name: "Sigenergy", app: "mySigenergy", implemented: false, requiredFields: [] },
 ];
 
 export interface ProviderAuthData {
@@ -35,6 +36,9 @@ export interface Source {
   lastPolledAt: string | null;
   lastError: string | null;
   createdAt: string;
+  consecutiveFailures: number;
+  circuitState: "closed" | "open" | "half-open";
+  lastViewedAt: string | null;
 }
 
 export interface NormalizedMetric {
@@ -56,5 +60,24 @@ export interface TelemetrySample {
   dailyYieldKwh: number;
   batterySoc: number | null;
   gridPowerKw: number | null;
+  timestamp: string;
+}
+
+export interface PollMetric {
+  sourceId: number;
+  durationMs: number;
+  success: boolean;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface SystemHealth {
+  status: "ok" | "degraded" | "down";
+  db: boolean;
+  kv: boolean;
+  sourcesTotal: number;
+  sourcesActive: number;
+  sourcesHealthy: number;
+  lastCronRun: string | null;
   timestamp: string;
 }

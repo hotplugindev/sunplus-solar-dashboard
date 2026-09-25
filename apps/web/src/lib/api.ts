@@ -12,6 +12,7 @@ export function setToken(token: string): void {
 
 export function clearToken(): void {
   localStorage.removeItem("dashboard_token");
+  document.cookie = "auth_token=; Max-Age=0; path=/";
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -27,6 +28,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers,
+    credentials: "include",
   });
 
   if (res.status === 401 || res.status === 403) {
@@ -72,6 +74,8 @@ export const api = {
       request<{ success: boolean }>(`/api/v1/sources/${id}`, { method: "DELETE" }),
     updateAuth: (id: number, auth: ProviderAuthData) =>
       request<{ success: boolean }>(`/api/v1/sources/${id}/auth`, { method: "PUT", body: JSON.stringify(auth) }),
+    test: (id: number) =>
+      request<{ success: boolean; metricsCount: number; durationMs: number; metrics?: NormalizedMetric[]; error?: string; hint?: string }>(`/api/v1/sources/${id}/test`, { method: "POST" }),
   },
   metrics: {
     fetch: () => request<{ metrics: NormalizedMetric[]; timestamp: string }>("/api/v1/metrics"),
@@ -80,8 +84,12 @@ export const api = {
       request<{ sourceId: number; range: string; telemetry: TelemetrySample[] }>(
         `/api/v1/metrics/${sourceId}/history?range=${range}`
       ),
+    exportCsv: (sourceId: number, range: string) => `${BASE_URL}/api/v1/metrics/${sourceId}/export?range=${range}`,
   },
   public: {
     metrics: () => request<{ metrics: NormalizedMetric[]; timestamp: string }>("/api/v1/public/metrics"),
+  },
+  health: {
+    check: () => request<{ status: string; db: boolean; kv: boolean; sourcesTotal: number; sourcesActive: number; sourcesHealthy: number; timestamp: string }>("/health"),
   },
 };
